@@ -1,6 +1,7 @@
 package usbfs
 
 import (
+	"fmt"
 	"time"
 	"unsafe"
 )
@@ -13,7 +14,28 @@ type bulkReq struct {
 }
 
 func (d *Device) Bulk(ep uint32, dir Direction, data []byte, timeout time.Duration) error {
-	// TODO: validate endpoints against d.interfaces
+	found := false
+	for itf, obj := range d.interfaces {
+		for _, e := range obj.endpoints {
+			if ep == uint32(e) {
+				found = true
+				break
+			}
+		}
+		if found {
+			if obj.isOpen {
+				break
+			}
+			if err := d.claim(uint32(itf)); err != nil {
+				return err
+			}
+			obj.isOpen = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("usbfs: device_build: endpoint not found: 0x%02x", ep)
+	}
 
 	var dataPointer uintptr
 	if len(data) > 0 {

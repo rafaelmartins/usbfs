@@ -10,12 +10,17 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type interf struct {
+	endpoints []byte
+	isOpen    bool
+}
+
 type Device struct {
 	isOpen     bool
 	sysfspath  string
 	devpath    string
 	fd         int
-	interfaces map[byte][]byte
+	interfaces map[byte]*interf
 
 	busnum       uint16
 	devnum       uint16
@@ -30,7 +35,7 @@ type Device struct {
 func newDevice(path string) (*Device, error) {
 	dev := &Device{
 		sysfspath:  path,
-		interfaces: map[byte][]byte{},
+		interfaces: map[byte]*interf{},
 	}
 
 	itfs, err := filepath.Glob(filepath.Join(path, "?-*:?.*"))
@@ -58,7 +63,10 @@ func newDevice(path string) (*Device, error) {
 			endpoints = append(endpoints, bEndpointAddress)
 		}
 
-		dev.interfaces[bInterfaceNumber] = endpoints
+		dev.interfaces[bInterfaceNumber] = &interf{
+			endpoints: endpoints,
+			isOpen:    false,
+		}
 	}
 
 	dev.busnum, err = sysfsReadAsUint16(path, "busnum")
@@ -163,12 +171,6 @@ func (d *Device) Open() error {
 
 	d.fd = fd
 	d.isOpen = true
-
-	for itf := range d.interfaces {
-		if err := d.claim(uint32(itf)); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }
